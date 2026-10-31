@@ -23,7 +23,7 @@ const cookie = request => (request.headers.get('Cookie')||'').split(';').map(x=>
 const baseHeaders={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY'};
 const json=(data,status=200,extra={})=>new Response(JSON.stringify(data),{status,headers:{...baseHeaders,'Content-Type':'application/json; charset=utf-8',...extra}});
 
-export function createWorker(assets={},upstream=fetch) {
+export function createWorker(assets={},upstream=(...args)=>fetch(...args)) {
   const attempts=new Map();
   return {
     async fetch(request,env) {
@@ -51,7 +51,10 @@ export function createWorker(assets={},upstream=fetch) {
             stage='encryption';
             await cryptoKey(secret);
             stage='provider';
-            const response=await upstream('https://api.zenithcode.net/stable/usage',{headers:{'x-api-key':apiKey,'Accept':'application/json','Accept-Language':'ja'},signal:AbortSignal.timeout(20000),redirect:'error'});
+            const controller=new AbortController();
+            const timeout=setTimeout(()=>controller.abort(),20000);
+            let response;
+            try {response=await upstream('https://api.zenithcode.net/stable/usage',{headers:{'x-api-key':apiKey,'Accept':'application/json','Accept-Language':'ja'},signal:controller.signal,redirect:'error'});} finally {clearTimeout(timeout);}
             if(!response.ok)return json({error:response.status===401?'APIキーを確認してください。':response.status===429?'無料枠の上限または回数制限に達しています。':'取得元で接続を確認できませんでした。',upstreamStatus:response.status},response.status===429?429:400);
             stage='response';
             const body=await response.json();const usage=body?.data??body;const record=Array.isArray(usage)?usage[0]:usage;
@@ -59,7 +62,7 @@ export function createWorker(assets={},upstream=fetch) {
             stage='session';
             const session=await sealSession(apiKey,user,secret);
             return json({connected:true,provider:'ZENITH Code',plan:'free',expires:Date.now()+7200000},200,{'Set-Cookie':`${COOKIE}=${session}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=7200`});
-          } catch {const messages={input:'入力内容を確認してください。',encryption:'サーバーの暗号化設定に問題があります。APIキーの再発行は不要です。',provider:'取得元への通信に失敗しました。少し待って再試行してください。',response:'取得元からの応答を読み取れませんでした。',session:'接続情報の保存に失敗しました。'};return json({error:messages[stage],code:'CONNECT_'+stage.toUpperCase()},502);}
+          } catch(error) {const messages={input:'入力内容を確認してください。',encryption:'サーバーの暗号化設定に問題があります。APIキーの再発行は不要です。',provider:'取得元への通信に失敗しました。少し待って再試行してください。',response:'取得元からの応答を読み取れませんでした。',session:'接続情報の保存に失敗しました。'};const reason=/Illegal invocation/i.test(error?.message||'')?'INVOCATION':/timeout|abort/i.test(error?.name||'')?'TIMEOUT':'FAILED';return json({error:messages[stage],code:'CONNECT_'+stage.toUpperCase()+'_'+reason},502);}
         }
         return json({error:'Not found'},404);
       }
