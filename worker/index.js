@@ -25,6 +25,7 @@ const json=(data,status=200,extra={})=>new Response(JSON.stringify(data),{status
 
 export function createWorker(assets={},upstream=(...args)=>fetch(...args)) {
   const attempts=new Map();
+  const dataAttempts=new Map();
   return {
     async fetch(request,env) {
       const secret=env?.SCOUT_COOKIE_SECRET||(typeof process!=='undefined'?process.env?.SCOUT_COOKIE_SECRET:undefined);
@@ -37,6 +38,31 @@ export function createWorker(assets={},upstream=(...args)=>fetch(...args)) {
           catch{return json({reachable:false,code:'PROVIDER_UNREACHABLE'},502);}
         }
         if(request.method!=='GET'&&request.headers.get('Origin')!==url.origin)return json({error:'同じ接続画面から操作してください。'},403);
+        if(['/api/market','/api/history'].includes(url.pathname)&&request.method==='POST') {
+          const session=await openSession(cookie(request),user,secret);
+          if(!session)return json({error:'接続期限が切れました。接続設定でキーを入力してください。'},401);
+          const now=Date.now();const recent=(dataAttempts.get(user)||[]).filter(t=>now-t<60000);
+          if(recent.length>=8)return json({error:'取得回数を抑えています。1分待って再試行してください。'},429);
+          if(dataAttempts.size>100)dataAttempts.delete(dataAttempts.keys().next().value);
+          dataAttempts.set(user,[...recent,now]);
+          try {
+            let endpoint='screener?isEtf=false&sortBy=changePct1w&order=desc&limit=100';
+            if(url.pathname==='/api/history') {
+              const raw=await request.text();if(raw.length>100)return json({error:'入力が長すぎます。'},400);
+              const symbol=String(JSON.parse(raw).symbol||'').toUpperCase();
+              if(!/^[0-9][0-9A-Z]{3}$/.test(symbol))return json({error:'証券コードは4桁で入力してください。'},400);
+              endpoint='historical-price-eod?symbol='+symbol;
+            }
+            const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),20000);
+            let r;try{r=await upstream('https://api.zenithcode.net/stable/'+endpoint,{headers:{'x-api-key':session.apiKey,Accept:'application/json','Accept-Language':'ja'},redirect:'manual',signal:controller.signal});}finally{clearTimeout(timer);}
+            if(!r.ok)return json({error:r.status===429?'無料枠の上限または回数制限に達しました。':r.status===401?'APIキーが無効です。接続設定を確認してください。':'取得元でデータを取得できませんでした。',upstreamStatus:r.status},r.status===429?429:502);
+            const body=await r.json();const rows=Array.isArray(body)?body:Array.isArray(body?.data)?body.data:Array.isArray(body?.historical)?body.historical:body?.data?.historical;
+            if(!Array.isArray(rows))return json({error:'取得元の応答形式を確認できませんでした。'},502);
+            const fields=url.pathname==='/api/market'?['symbol','nameJa','nameEn','price','per','pbr','roe','dividendYield']:['date','close','adjustedClose'];
+            const clean=rows.map(row=>Object.fromEntries(fields.map(k=>[k,typeof row[k]==='string'?row[k].slice(0,150):typeof row[k]==='number'&&Number.isFinite(row[k])?row[k]:null])));
+            return json({rows:clean,receivedAt:new Date().toISOString(),asOf:r.headers.get('X-Data-As-Of'),tokens:10});
+          }catch{return json({error:'データを取得できませんでした。少し待って再試行してください。'},502);}
+        }
         if(url.pathname==='/api/session'&&request.method==='GET') {
           const session=await openSession(cookie(request),user,secret);
           return json({connected:Boolean(session),provider:'ZENITH Code',expires:session?.expires||null,serverReady:typeof secret==='string'&&secret.length>=32});
@@ -70,12 +96,12 @@ export function createWorker(assets={},upstream=(...args)=>fetch(...args)) {
         }
         return json({error:'Not found'},404);
       }
-      if(url.pathname==='/'||url.pathname==='/connect') {
+      if(url.pathname==='/'||url.pathname==='/connect'||url.pathname==='/market') {
         if(!user)return new Response(null,{status:302,headers:{Location:'/signin-with-chatgpt?return_to=%2Fconnect',...baseHeaders}});
-        return new Response(assets['connect.html'],{headers:{...baseHeaders,'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"}});
+        return new Response(assets[url.pathname==='/market'?'market.html':'connect.html'],{headers:{...baseHeaders,'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"}});
       }
       const asset=assets[url.pathname.slice(1)];
-      if(asset!==undefined&&['/connect.js','/style.css','/icon.svg'].includes(url.pathname))return new Response(asset,{headers:{...baseHeaders,'Content-Type':url.pathname.endsWith('.js')?'text/javascript; charset=utf-8':url.pathname.endsWith('.css')?'text/css; charset=utf-8':'image/svg+xml'}});
+      if(asset!==undefined&&['/connect.js','/market.js','/engine.js','/style.css','/icon.svg'].includes(url.pathname))return new Response(asset,{headers:{...baseHeaders,'Content-Type':url.pathname.endsWith('.js')?'text/javascript; charset=utf-8':url.pathname.endsWith('.css')?'text/css; charset=utf-8':'image/svg+xml'}});
       return new Response('Not found',{status:404,headers:baseHeaders});
     },
   };

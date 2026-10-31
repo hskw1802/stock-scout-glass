@@ -9,3 +9,11 @@ test('Free接続で生キーを返さずHttpOnly Cookieを返す',async()=>{let 
 test('有料プランと上流エラーではセッションを発行しない',async()=>{for(const response of [Response.json({plan:'pro'}),Response.json({}, {status:401}),Response.json({}, {status:429})]){const w=createWorker({},async()=>response);const r=await w.fetch(request('/api/connect','POST',{apiKey:'test-api-key-123456'}),env);assert.ok(r.status>=400);assert.equal(r.headers.get('set-cookie'),null);}});
 
 test('上流リダイレクトにキーを転送せず接続を拒否',async()=>{const w=createWorker({},async()=>new Response(null,{status:302,headers:{Location:'https://elsewhere.test'}}));const r=await w.fetch(request('/api/connect','POST',{apiKey:'test-api-key-123456'}),env);assert.equal(r.status,400);assert.equal(r.headers.get('set-cookie'),null);});
+
+test('実データは本人の暗号化Cookieを要求し、上流の余分な項目を返さない',async()=>{
+let calls=0;const w=createWorker({},async(url,options)=>{calls++;assert.equal(options.redirect,'manual');assert.equal(options.headers['x-api-key'],'test-api-key-123456');assert.match(url,/screener/);return Response.json({data:[{symbol:'7203',nameJa:'テスト',price:100,secret:'must-not-return'}]});});
+assert.equal((await w.fetch(request('/api/market','POST',{}),env)).status,401);assert.equal(calls,0);
+const sealed=await sealSession('test-api-key-123456','test-user',secret);const req=request('/api/market','POST',{});req.headers.set('Cookie','__Host-scout_session='+sealed);
+const r=await w.fetch(req,env);assert.equal(r.status,200);const body=await r.json();assert.equal(body.rows[0].symbol,'7203');assert.equal(body.rows[0].secret,undefined);assert.ok(!JSON.stringify(body).includes('test-api-key'));
+});
+test('日足取得の不正コードを上流へ送らない',async()=>{let calls=0;const w=createWorker({},async()=>{calls++;return Response.json([]);});const req=request('/api/history','POST',{symbol:'../../bad'});req.headers.set('Cookie','__Host-scout_session='+await sealSession('test-api-key-123456','test-user',secret));assert.equal((await w.fetch(req,env)).status,400);assert.equal(calls,0);});
