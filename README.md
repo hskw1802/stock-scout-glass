@@ -1,13 +1,19 @@
 # Stock Scout
 
-本人用の無料API接続画面です。
+本人用の日本株スクリーニングWebアプリです。
 
 - 本人用: https://stock-scout-glass-hskw.hskw1802.chatgpt.site/connect
 - 公開入口: https://hskw1802.github.io/stock-scout-glass/
 
 ## 現在の実装状態
 
-接続画面・ZENITH Code Freeプランのキー検証・暗号化Cookie・接続解除を実装しました。実データの銘柄一覧、移動平均表示、常時監視、通知は接続後の作業で、まだ未実装です。架空株価は現在の画面で使用しません。実際のAPIキーによる接続試験は、本人がキーを入力してから行います。
+Freeプランのキー検証、暗号化Cookie、実データの銘柄一覧、日足・5/25/75日移動平均、ページを開いた際の購入候補の自動抽出を実装しています。常時監視・iPhone通知・注文情報の自動入力は未対応です。架空株価は使いません。
+
+自動抽出は市場全体から時価総額1,000億円超・PER/ROEが正の上位100銘柄を一次抽出し、週次騰落率・業種の強弱で絞った最大5銘柄の日足を検証します。全銘柄の網羅的な移動平均ランキングではありません。条件は未検証の初期設定で、スコアは利益確率ではありません。地合い不良、ニュース未取得、古いデータ、基準日の不一致では判定を保留します。
+
+指数は日経225連動ETF(1321)・TOPIX連動ETF(1306)で代用し、指数自体との違いを画面に表示します。金利・為替・業種・市場心理はZENITH Code、ニュースはGDELT DOCの全文検索を使用します。ニュース本文の全文検索でリスク語の言及を検出するルール評価です。生成AIによる記事読解・真偽判定・企業への影響の推定は実装していません。記事本文は再配信せず、見出し・原文リンク・検出時刻を表示します。
+
+1回の自動判定は最大104トークン（画面の上限表示105）、約3分が目安です。8.5秒以上の取得間隔を取り、ニュースの回数制限にも配慮します。月間枠・取得元の稼働状況によっては停止します。有料枠への切替はしません。判定中は停止ボタンで中断できます。
 
 ## 接続手順
 
@@ -44,7 +50,7 @@ Sitesのアクセス権を本人限定に維持してください。APIはログ
 ## ビルドとテスト
 
 ```sh
-node --test tests/engine.test.mjs tests/connection.test.mjs tests/public.test.mjs
+node --test
 node scripts/build.mjs
 node scripts/validate-artifact.mjs
 ```
@@ -61,3 +67,6 @@ node scripts/validate-artifact.mjs
 - https://zenithcode.net/docs/historical-price-eod
 
 TradingView埋め込みは東証銘柄の表示制限をブラウザで確認したため不採用です。公開ページへ日本株が表示できるとの未検証の主張はしません。
+
+- https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/
+- https://nextfunds.jp/lineup/

@@ -2,7 +2,7 @@ import {marketGate,evaluate,fresh} from './scoring.js';
 const $=id=>document.getElementById(id);const node=(tag,text)=>{const n=document.createElement(tag);n.textContent=text;return n;};const pct=n=>Number.isFinite(n)?(n*100).toFixed(2)+'%':'未取得';
 let running=false,stopped=false,lastCall=0,controller;let spent=0;
 async function wait(){while(Date.now()-lastCall<8500){if(stopped)throw Error('停止しました');await new Promise(r=>setTimeout(r,300));}}
-async function load(kind,body){await wait();if(stopped)throw Error('停止しました');lastCall=Date.now();controller=new AbortController();const r=await fetch(kind==='history'?'/api/history':'/api/research',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(kind==='history'?body:{kind,...body}),cache:'no-store',signal:controller.signal});const d=await r.json();if(!r.ok)throw Error(d.error||'取得失敗');spent+=d.tokens||0;return d;}
+async function load(kind,body){await wait();if(stopped)throw Error('停止しました');lastCall=Date.now();controller=new AbortController();const r=await fetch(kind==='history'?'/api/history':'/api/research',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(kind==='history'?body:{kind,...body}),cache:'no-store',signal:controller.signal});const d=await r.json();if(!r.ok)throw Error((d.error||'取得失敗')+(d.upstreamStatus?' ['+d.upstreamStatus+']':''));spent+=d.tokens||0;return d;}
 function newsDate(s){const m=/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(s||'');return m?m[1]+'-'+m[2]+'-'+m[3]+'T'+m[4]+':'+m[5]+':'+m[6]+'Z':null;}
 function validNews(rows){const seen=new Set();return rows.filter(a=>{const date=newsDate(a.seendate);if(!date||Date.now()-Date.parse(date)>72*3600000||Date.parse(date)>Date.now()+3600000||seen.has(a.url))return false;seen.add(a.url);return true;});}
 function showNews(rows,risk){const root=$('scout-news');root.replaceChildren();if(!rows.length){root.append(node('p','直近ニュースを取得できませんでした。ニュース未確認のため候補判定は保留します。'));return;}for(const a of rows.slice(0,12)){const p=document.createElement('p');const link=node('a',a.title);link.href=a.url;link.target='_blank';link.rel='noopener noreferrer';p.append(link,node('small',a.domain+' · 検出 '+new Date(newsDate(a.seendate)).toLocaleString('ja-JP')+(risk.some(x=>x.url===a.url)?' · リスク語が本文検索に一致':'')));root.append(p);}}
@@ -12,12 +12,12 @@ async function scan(){if(running)return;running=true;stopped=false;spent=0;$('sc
 try{
 progress('日経225・TOPIXの連動ETFを確認');const indices=(await load('indices')).rows;
 progress('業種の強弱を確認');const sectors=(await load('sectors')).rows;
-progress('市場の騰落状況を確認');const breadth=(await load('breadth')).rows.find(x=>x.sector==='ALL');
+const breadth=null;
 progress('市場心理を確認');let sentiment=null;try{const r=(await load('sentiment')).rows[0];if(fresh(r.updatedAt)&&Number.isFinite(r.score))sentiment=r.score;}catch{}
 progress('ドル円・米10年金利を確認');const macros=[];for(const [kind,name] of [['fx','ドル円'],['rates','米10年金利']]){try{macros.push(macro((await load(kind)).rows,name));}catch{macros.push({name,rows:[]});}}
 progress('直近ニュースの本文検索');const news=validNews((await load('news')).rows);
 progress('関税・制裁・景気後退・戦争・利上げの言及を確認');const riskNews=validNews((await load('newsRisk')).rows);showNews([...news,...riskNews.filter(x=>!news.some(y=>y.url===x.url))],riskNews);
-const warnings=[];for(const m of macros){if(m.rows.length>=2){const change=m.rows[0].value-m.rows[1].value;if(m.name==='ドル円'&&Math.abs(change/m.rows[1].value)>.01)warnings.push('ドル円が直近観測比1%超変動');if(m.name==='米10年金利'&&change>.1)warnings.push('米10年金利が直近観測比0.1pt超上昇');}}
+const warnings=['市場の値上がり比率は未確認'];for(const m of macros){if(m.rows.length>=2){const change=m.rows[0].value-m.rows[1].value;if(m.name==='ドル円'&&Math.abs(change/m.rows[1].value)>.01)warnings.push('ドル円が直近観測比1%超変動');if(m.name==='米10年金利'&&change>.1)warnings.push('米10年金利が直近観測比0.1pt超上昇');}}
 for(const i of indices)$('scout-context').append(node('div',(i.symbol==='1321'?'日経225連動ETF':'TOPIX連動ETF')+' 週 '+pct(i.changePct1w)+' · '+(i.priceDate||'日付なし')));
 $('scout-context').append(node('div','値上がり比率 '+pct(breadth?.pctAdvancing)),node('div','市場心理 '+(sentiment??'未確認')));
 for(const m of macros)$('scout-context').append(node('div',m.name+' '+(m.rows.length?m.rows[0].value+' · '+m.rows[0].date:'未確認')));
