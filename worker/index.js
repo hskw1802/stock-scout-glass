@@ -55,7 +55,7 @@ export function createWorker(assets={},upstream=(...args)=>fetch(...args)) {
               endpoint='historical-price-eod?symbol='+symbol;
             }
             if(url.pathname==='/api/research') {
-              const raw=await request.text();if(raw.length>150)return json({error:'入力が長すぎます。'},400);
+              const raw=await request.text();if(raw.length>1000)return json({error:'入力が長すぎます。'},400);
               const researchInput=JSON.parse(raw);research=researchInput.kind;
               const endpoints={indices:'batch-quote?symbols=1321,1306',sectors:'sector-performance?period=1w&basis=weighted&order=desc',breadth:'market-breadth',sentiment:'fear-greed',catalog:'economic-indicators',fx:'economic-series?id=DEXJPUS&limit=8',rates:'economic-series?id=DGS10&limit=8',universe:'screener?isEtf=false&marketCapMoreThan=100000000000&perMoreThan=0&roeMoreThan=0&sortBy=changePct1w&order=desc&limit=100'};
               if(['news','newsRisk'].includes(research)) {
