@@ -125,7 +125,7 @@ export function createWorker(assets={},upstream=(...args)=>fetch(...args)) {
         return new Response(assets[url.pathname==='/market'?'market.html':'connect.html'],{headers:{...baseHeaders,'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"}});
       }
       const asset=assets[url.pathname.slice(1)];
-      if(asset!==undefined&&['/connect.js','/market.js','/engine.js','/scout.js','/scoring.js','/style.css','/icon.svg'].includes(url.pathname))return new Response(asset,{headers:{...baseHeaders,'Content-Type':url.pathname.endsWith('.js')?'text/javascript; charset=utf-8':url.pathname.endsWith('.css')?'text/css; charset=utf-8':'image/svg+xml'}});
+      if(asset!==undefined&&['/connect.js','/market.js','/engine.js','/scout.js','/scoring.js','/sbi.js','/style.css','/icon.svg'].includes(url.pathname))return new Response(asset,{headers:{...baseHeaders,'Content-Type':url.pathname.endsWith('.js')?'text/javascript; charset=utf-8':url.pathname.endsWith('.css')?'text/css; charset=utf-8':'image/svg+xml'}});
       return new Response('Not found',{status:404,headers:baseHeaders});
     },
   };
