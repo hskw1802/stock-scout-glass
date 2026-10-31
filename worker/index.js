@@ -32,6 +32,10 @@ export function createWorker(assets={},upstream=(...args)=>fetch(...args)) {
       const user=request.headers.get('oai-authenticated-user-id');
       if(url.pathname.startsWith('/api/')) {
         if(!user)return json({error:'本人のログインが必要です。'},401);
+        if(url.pathname==='/api/health'&&request.method==='GET') {
+          try {const r=await upstream('https://api.zenithcode.net/stable/usage',{redirect:'error'});return json({reachable:true,upstreamStatus:r.status});}
+          catch(error){return json({reachable:false,reason:String(error.message).slice(0,300)},502);}
+        }
         if(request.method!=='GET'&&request.headers.get('Origin')!==url.origin)return json({error:'同じ接続画面から操作してください。'},403);
         if(url.pathname==='/api/session'&&request.method==='GET') {
           const session=await openSession(cookie(request),user,secret);
