@@ -33,8 +33,8 @@ export function createWorker(assets={},upstream=(...args)=>fetch(...args)) {
       if(url.pathname.startsWith('/api/')) {
         if(!user)return json({error:'本人のログインが必要です。'},401);
         if(url.pathname==='/api/health'&&request.method==='GET') {
-          try {const r=await upstream('https://api.zenithcode.net/stable/usage',{redirect:'error'});return json({reachable:true,upstreamStatus:r.status});}
-          catch(error){return json({reachable:false,reason:String(error.message).slice(0,300)},502);}
+          try {const r=await upstream('https://api.zenithcode.net/stable/usage',{redirect:'manual'});return json({reachable:true,upstreamStatus:r.status});}
+          catch{return json({reachable:false,code:'PROVIDER_UNREACHABLE'},502);}
         }
         if(request.method!=='GET'&&request.headers.get('Origin')!==url.origin)return json({error:'同じ接続画面から操作してください。'},403);
         if(url.pathname==='/api/session'&&request.method==='GET') {
@@ -58,7 +58,7 @@ export function createWorker(assets={},upstream=(...args)=>fetch(...args)) {
             const controller=new AbortController();
             const timeout=setTimeout(()=>controller.abort(),20000);
             let response;
-            try {response=await upstream('https://api.zenithcode.net/stable/usage',{headers:{'x-api-key':apiKey,'Accept':'application/json','Accept-Language':'ja'},signal:controller.signal,redirect:'error'});} finally {clearTimeout(timeout);}
+            try {response=await upstream('https://api.zenithcode.net/stable/usage',{headers:{'x-api-key':apiKey,'Accept':'application/json','Accept-Language':'ja'},signal:controller.signal,redirect:'manual'});} finally {clearTimeout(timeout);}
             if(!response.ok)return json({error:response.status===401?'APIキーを確認してください。':response.status===429?'無料枠の上限または回数制限に達しています。':'取得元で接続を確認できませんでした。',upstreamStatus:response.status},response.status===429?429:400);
             stage='response';
             const body=await response.json();const usage=body?.data??body;const record=Array.isArray(usage)?usage[0]:usage;
