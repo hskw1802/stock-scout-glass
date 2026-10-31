@@ -27,17 +27,19 @@ export function createWorker(assets={},upstream=fetch) {
   const attempts=new Map();
   return {
     async fetch(request,env) {
+      const secret=env?.SCOUT_COOKIE_SECRET||(typeof process!=='undefined'?process.env?.SCOUT_COOKIE_SECRET:undefined);
       const url=new URL(request.url);
       const user=request.headers.get('oai-authenticated-user-id');
       if(url.pathname.startsWith('/api/')) {
         if(!user)return json({error:'本人のログインが必要です。'},401);
         if(request.method!=='GET'&&request.headers.get('Origin')!==url.origin)return json({error:'同じ接続画面から操作してください。'},403);
         if(url.pathname==='/api/session'&&request.method==='GET') {
-          const session=await openSession(cookie(request),user,env.SCOUT_COOKIE_SECRET);
-          return json({connected:Boolean(session),provider:'ZENITH Code',expires:session?.expires||null});
+          const session=await openSession(cookie(request),user,secret);
+          return json({connected:Boolean(session),provider:'ZENITH Code',expires:session?.expires||null,serverReady:typeof secret==='string'&&secret.length>=32});
         }
         if(url.pathname==='/api/disconnect'&&request.method==='POST')return json({connected:false},200,{'Set-Cookie':`${COOKIE}=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0`});
         if(url.pathname==='/api/connect'&&request.method==='POST') {
+          let stage='input';
           try {
             const now=Date.now();if(now-(attempts.get(user)||0)<6500)return json({error:'数秒待ってから再試行してください。'},429);
             attempts.set(user,now);if(attempts.size>100)attempts.delete(attempts.keys().next().value);
@@ -46,14 +48,18 @@ export function createWorker(assets={},upstream=fetch) {
             const text=await request.text();if(text.length>2048)return json({error:'入力が長すぎます。'},400);
             const input=JSON.parse(text);const apiKey=String(input.apiKey||'').trim();
             if(!/^[A-Za-z0-9_.-]{16,256}$/.test(apiKey))return json({error:'APIキーの形式を確認してください。'},400);
-            await cryptoKey(env.SCOUT_COOKIE_SECRET);
+            stage='encryption';
+            await cryptoKey(secret);
+            stage='provider';
             const response=await upstream('https://api.zenithcode.net/stable/usage',{headers:{'x-api-key':apiKey,'Accept':'application/json','Accept-Language':'ja'},signal:AbortSignal.timeout(20000),redirect:'error'});
             if(!response.ok)return json({error:response.status===401?'APIキーを確認してください。':response.status===429?'無料枠の上限または回数制限に達しています。':'取得元で接続を確認できませんでした。',upstreamStatus:response.status},response.status===429?429:400);
+            stage='response';
             const body=await response.json();const usage=body?.data??body;const record=Array.isArray(usage)?usage[0]:usage;
             if(record?.plan!=='free')return json({error:'無料のFreeプランであることを確認できませんでした。ZENITH Codeの設定を確認してください。'},400);
-            const session=await sealSession(apiKey,user,env.SCOUT_COOKIE_SECRET);
+            stage='session';
+            const session=await sealSession(apiKey,user,secret);
             return json({connected:true,provider:'ZENITH Code',plan:'free',expires:Date.now()+7200000},200,{'Set-Cookie':`${COOKIE}=${session}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=7200`});
-          } catch {return json({error:'接続を確認できませんでした。少し待って再試行してください。'},502);}
+          } catch {const messages={input:'入力内容を確認してください。',encryption:'サーバーの暗号化設定に問題があります。APIキーの再発行は不要です。',provider:'取得元への通信に失敗しました。少し待って再試行してください。',response:'取得元からの応答を読み取れませんでした。',session:'接続情報の保存に失敗しました。'};return json({error:messages[stage],code:'CONNECT_'+stage.toUpperCase()},502);}
         }
         return json({error:'Not found'},404);
       }
