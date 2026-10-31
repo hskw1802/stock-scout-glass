@@ -48,25 +48,6 @@ export function calculateBudget(priceInput, amountInput, lot) {
   return { shares: Number(shares), cost: decimal(cost), remaining: decimal(a-cost) };
 }
 
-export function makeDemo() {
-  let seed = 7312026;
-  const random = () => { seed = (Math.imul(seed,1664525)+1013904223)>>>0; return seed/4294967296; };
-  const sectors = ['電気機器','情報・通信','機械','小売','化学','サービス','食品','銀行'];
-  const dates = [];
-  let cursor = new Date('2026-10-30T00:00:00Z');
-  while (dates.length < 180) {
-    if (![0,6].includes(cursor.getUTCDay())) dates.unshift(cursor.toISOString().slice(0,10));
-    cursor.setUTCDate(cursor.getUTCDate()-1);
-  }
-  const stocks = Array.from({ length: 240 }, (_, i) => {
-    let price = 500+random()*5800;
-    const drift = (i%7-3)*.0012;
-    const closes = dates.map(() => { price *= 1+drift+(random()-.5)*.035; return Math.round(price*10)/10; });
-    return { code: `D${String(i+1).padStart(4,'0')}`, name: `デモ銘柄 ${String(i+1).padStart(3,'0')}`, sector: sectors[i%sectors.length], lot:100, closes, dates };
-  });
-  return { mode:'demo', source:'架空データ', asOf:'2026-10-30T15:30:00+09:00', coverage:'架空240銘柄', complete:false, stocks };
-}
-
 export function filterStocks(stocks, { tab='candidates', search='', sector='all', sort='deviation', watch=[] } = {}) {
   const query = search.trim().toLowerCase();
   const filtered = stocks.filter(s => (!query || `${s.code} ${s.name}`.toLowerCase().includes(query)) && (sector==='all'||s.sector===sector) && (tab==='all'||tab==='candidates'&&s.candidate||tab==='cross'&&s.cross||tab==='watch'&&watch.includes(s.code)));
