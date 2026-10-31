@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';
+test('公開入口は本人用サイトを案内し、キー入力欄を持たない',async()=>{const html=await readFile(new URL('../dist/index.html',import.meta.url),'utf8');assert.ok(html.includes('https://stock-scout-glass-hskw.hskw1802.chatgpt.site/connect'));assert.ok(!html.includes('type="password"'));assert.ok(!html.includes('デモ銘柄'));});
+test('本人用のキーはブラウザの永続ストレージに保存しない',async()=>{const js=await readFile(new URL('../dist/connect.js',import.meta.url),'utf8');assert.ok(!js.includes('localStorage'));assert.ok(!js.includes('sessionStorage'));assert.ok(!js.includes('console.log'));});

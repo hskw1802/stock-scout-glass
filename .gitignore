@@ -8,3 +8,5 @@ node_modules/
 .openai/*.local.*
 .openai/sites-source-local.json
 __pycache__/
+dist/server/
+dist/.openai/

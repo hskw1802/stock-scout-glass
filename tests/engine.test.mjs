@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyze, calculateBudget, makeDemo, movingAverage, filterStocks, validPeriods } from '../dist/engine.js';
+import { analyze, calculateBudget, movingAverage, filterStocks, validPeriods } from '../dist/engine.js';
 const stock = closes => ({ code:'TEST', name:'テスト', lot:100, closes });
 test('移動平均は期間未満をnullにする', () => assert.deepEqual(movingAverage([1,2,3,4],3), [null,null,2,3]));
 test('上昇トレンドの移動平均と候補判定', () => {
@@ -28,14 +28,9 @@ test('予算を超える株数に丸めない', () => {
   for (const amount of ['-1','','NaN','1e6']) assert.throws(()=>calculateBudget(100,amount,100));
   assert.throws(()=>calculateBudget('0.000001','99999999999999',1));
 });
-test('デモは実市場と区別され、再現可能', () => {
-  assert.deepEqual(makeDemo(),makeDemo()); const d = makeDemo();
-  assert.equal(d.mode,'demo'); assert.equal(d.complete,false); assert.equal(d.stocks.length,240);
-  assert.ok(d.stocks.every(s=>s.code.startsWith('D')&&s.closes.length===180));
-});
 test('市場検索と保存銘柄の絞り込み', () => {
-  const s = makeDemo().stocks.map(x=>analyze(x));
-  assert.equal(filterStocks(s,{tab:'all',search:'D0001'}).length,1);
-  assert.equal(filterStocks(s,{tab:'watch',watch:['D0001']})[0].code,'D0001');
+  const s = [analyze({...stock(Array.from({length:100},(_,i)=>100+i)),code:'TEST1'})];
+  assert.equal(filterStocks(s,{tab:'all',search:'TEST1'}).length,1);
+  assert.equal(filterStocks(s,{tab:'watch',watch:['TEST1']})[0].code,'TEST1');
   assert.ok(filterStocks(s).every(x=>x.candidate));
 });

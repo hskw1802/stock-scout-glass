@@ -1,13 +1,14 @@
 {
   "name": "stock-scout-glass",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Liquid Glass UI for a Japanese stock screening prototype",
   "scripts": {
     "dev": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check dist/app.js && node --check dist/engine.js && node --check scripts/serve.mjs"
+    "check": "node --check dist/connect.js && node --check worker/index.js && node --check dist/engine.js"
   },
   "engines": { "node": ">=20" }
 }
