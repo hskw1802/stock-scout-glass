@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+*.tar.gz
+.DS_Store
+.openai/*.local.*
+.openai/sites-source-local.json
+__pycache__/
